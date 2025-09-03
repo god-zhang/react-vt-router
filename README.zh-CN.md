@@ -18,27 +18,118 @@ pnpm add react-vt-router
 yarn add react-vt-router
 ```
 
-## 快速开始
+## 快速开始（更详细）
+
+1）布局 Layout（带导航 + Outlet）
 
 ```tsx
-import { BrowserRouter, Routes, Route, Link, NavLink, Navigate, Outlet } from "react-vt-router";
+import { Link, NavLink, Outlet } from "react-vt-router";
+
+function Layout() {
+	return (
+		<div>
+			<nav style={{ display: "flex", gap: 12 }}>
+				<Link to="/">首页</Link>
+				<NavLink to="/users" className={({ isActive }) => (isActive ? "active" : undefined)}>
+					用户
+				</NavLink>
+			</nav>
+			<hr />
+			<Outlet />
+		</div>
+	);
+}
+```
+
+2）页面 Pages（路由参数 + 查询参数）
+
+```tsx
+import { Link, useParams, useSearchParams } from "react-vt-router";
+
+function Home() { return <h2>首页</h2>; }
+
+function Users() {
+	const list = [1, 2, 3];
+	return (
+		<div>
+			<h2>用户列表</h2>
+			<ul>
+				{list.map(id => (
+					<li key={id}>
+						<Link to={`/users/${id}?tab=profile`}>用户 {id}</Link>
+					</li>
+				))}
+			</ul>
+		</div>
+	);
+}
+
+function UserDetail() {
+	const { id } = useParams<{ id: string }>();
+	const [sp] = useSearchParams();
+	return (
+		<div>
+			<h3>用户：{id}</h3>
+			<div>tab = {sp.get("tab") ?? "-"}</div>
+		</div>
+	);
+}
+
+function NotFound() { return <h2>页面不存在</h2>; }
+```
+
+3）接线 Routes（父子嵌套 + 跳转）
+
+```tsx
+import { BrowserRouter, Routes, Route, Navigate } from "react-vt-router";
 
 export default function App() {
 	return (
 		<BrowserRouter defaultViewTransition="zoom">
 			<Routes>
-				<Route path="/" element={<Layout/>}>
-					<Route index element={<Home/>} />
+				<Route path="/" element={<Layout />}>{/* 父级路由 + 布局 */}
+					<Route index element={<Home />} />      {/* index = 默认子路由 */}
 					<Route path="users">
-						<Route index element={<Users/>} />
-						<Route path=":id" element={<UserDetail/>} />
+						<Route index element={<Users />} />
+						<Route path=":id" element={<UserDetail />} />
 					</Route>
+					{/* 旧路径重定向 */}
 					<Route path="old-home" element={<Navigate to="/" replace />} />
 				</Route>
-				<Route path="*" element={<NotFound/>} />
+				<Route path="*" element={<NotFound />} />
 			</Routes>
 		</BrowserRouter>
 	);
+}
+```
+
+4）编程式导航 + 视图转场
+
+```tsx
+import { useNavigate } from "react-vt-router";
+
+function Buttons() {
+	const navigate = useNavigate();
+	return (
+		<div style={{ display: "flex", gap: 8 }}>
+			<button onClick={() => navigate("/users/1", { viewTransition: "slide" })}>
+				去用户 1（slide）
+			</button>
+			<button onClick={() => navigate.back()}>后退</button>
+			<button onClick={() => navigate.forward()}>前进</button>
+		</div>
+	);
+}
+```
+
+5）匹配示例（可选）
+
+```tsx
+import { useMatch } from "react-vt-router";
+
+function UsersBadge() {
+	const match = useMatch("/users/*");
+	return match ? <span>Users 区域</span> : null;
 }
 ```
 
@@ -107,14 +198,125 @@ export default function App() {
 - 预设：`fade`、`slide`、`slide-left`、`slide-right`、`zoom`
 - 自定义示例：
 
+1）全局配置（默认转场）
+
+```tsx
+import { BrowserRouter } from "react-vt-router";
+
+const vt = {
+	name: "fade",          // 将在 <html> 节点上设置 attribute="fade"
+	className: "vt-running", // 转场期间挂在 <html> 的类名
+	attribute: "data-vt",  // 属性名，默认 data-vt
+	onStart() { /* 开始前（快照前） */ },
+	onReady() { /* DOM 快照完成，可开始渲染新页面 */ },
+	onFinished() { /* 转场结束，清理标记 */ },
+};
+
+export function App() {
+	return (
+		<BrowserRouter defaultViewTransition={vt}>
+			{/* ...Routes */}
+		</BrowserRouter>
+	);
+}
+```
+
+2）每次导航覆盖（Link / navigate）
+
+```tsx
+import { Link, useNavigate } from "react-vt-router";
+
+// Link：字符串预设
+<Link to="/users/2" viewTransition="slide-right">用户2</Link>
+
+// Link：显式关闭本次转场
+<Link to="/" viewTransition={false}>返回首页（无动画）</Link>
+
+// Link：自定义对象
+<Link to="/about" viewTransition={{ name: "fade", className: "my-vt" }}>关于</Link>
+
+// 编程式导航：传入对象
+function Go() {
+	const navigate = useNavigate();
+	return (
+		<button
+			onClick={() => navigate("/users/3", {
+				viewTransition: { name: "slide", className: "vt-running" },
+				replace: false,
+				scroll: "auto",
+			})}
+		>
+			去用户3（自定义转场）
+		</button>
+	);
+}
+```
+
+3）生命周期钩子
+
 ```ts
-const cfg = {
-	name: "fade",          // data-vt="fade"
-	className: "my-vt",    // 转场期间挂在 html 的类名
-	attribute: "data-vt",  // 预设使用的属性名
-	onStart(){}, onReady(){}, onFinished(){}
+const vt = {
+	name: "fade",
+	onStart() {
+		console.log("VT start");
+	},
+	onReady() {
+		console.log("VT ready");
+	},
+	onFinished() {
+		console.log("VT finished");
+	},
 };
 ```
+
+4）CSS 自定义（示例）
+
+库会在转场期间给 <html> 添加：
+- 一个属性（默认 `data-vt`），值为配置的 `name`
+- 一个类名（可配置 `className`）
+
+你可以基于此编写样式，或直接使用 View Transitions 的伪元素：
+
+```css
+/* 按名称作用域：只有在 fade 转场下才生效 */
+html[data-vt="fade"]::view-transition-old(root) {
+	animation: fade-out 180ms ease-in both;
+}
+html[data-vt="fade"]::view-transition-new(root) {
+	animation: fade-in 220ms ease-out both;
+}
+
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes fade-in  { from { opacity: 0 } to { opacity: 1 } }
+
+/* 也可用类名进行更细粒度控制 */
+html.vt-running { /* 转场进行中 */ }
+```
+
+5）进阶：按方向切换动画
+
+```tsx
+import { useLocation, useNavigate } from "react-vt-router";
+
+function PrevNext({ currentId }: { currentId: number }) {
+	const { pathname } = useLocation();
+	const navigate = useNavigate();
+
+	const goto = (id: number) => {
+		const vtName = id > currentId ? "slide-left" : "slide-right";
+		navigate(`/users/${id}`, { viewTransition: vtName });
+	};
+
+	return (
+		<div style={{ display: "flex", gap: 8 }}>
+			<button onClick={() => goto(currentId - 1)}>上一个</button>
+			<button onClick={() => goto(currentId + 1)}>下一个</button>
+		</div>
+	);
+}
+```
+
+说明：当浏览器不支持 View Transitions API 时，会优雅退化为无动画导航；当 `viewTransition: false` 时，本次导航强制无动画。
 
 ## 调试与兼容
 - 调试日志：`window.__REACT_VT_ROUTER_DEBUG__ = true`
